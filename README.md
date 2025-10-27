@@ -2,6 +2,11 @@
 
 This project demonstrates an expert-system-backed travel recommender for Sri Lanka using **Experta**.
 
+## Links
+
+- Hosted demo: https://intelligent-travel-planning-str.streamlit.app/
+- Source repository: https://github.com/manojtharindu11/itp_sl_via_experta
+
 ## How It Works
 
 The intelligent travel planner uses an **Experta-based expert system** to recommend optimal routes through Sri Lanka based on your preferences:
