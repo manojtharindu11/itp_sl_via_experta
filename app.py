@@ -135,7 +135,7 @@ if go:
                 f"- Season fit: prioritizes destinations with best season = `{season}`\n"
                 f"- Budget fit: tries destinations with budget = `{budget}`\n"
                 f"- Route: built from known inter-city distances\n"
-                f"- Data source: Experta-based knowledge module in `app/experta_kb.py` (Prolog KB archived)"
+                f"- Data source: Experta-based knowledge module in `app/experta_kb.py`"
             )
 else:
     st.info("Set your preferences in the sidebar and click 'Find Route'")
