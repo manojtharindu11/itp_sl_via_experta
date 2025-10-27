@@ -1,204 +1,211 @@
 """
-Lightweight Experta-based knowledge module for the travel planner.
+New modular Experta-based knowledge module (v2).
 
-This module mirrors the facts in `kb/*.pl` and provides a small wrapper using
-Experta to mark recommended cities by season and budget. It also exposes
-helper functions used by `app/query.py`: `recommend_trip`, `get_city_coords`,
-`get_attractions`, `get_all_cities`, and `city_exists`.
+This module uses the improved modular structure with separated concerns:
+- app.kb.entities: Domain models (City, Connection, Enums)
+- app.kb.data: Factual knowledge base
+- app.kb.rules: Expert system inference rules
+- app.kb.algorithms: Graph algorithms for pathfinding
 
-The route-finding uses a simple Dijkstra implementation on the distances
-graph defined below. Experta is used to demonstrate rule firing for
-recommendations; the path computation is performed in Python for simplicity
-and determinism.
+This is the new recommended way to use the travel planner KB.
 """
-from typing import List, Dict, Any, Tuple
-try:
-    from experta import KnowledgeEngine, Fact, Rule, MATCH
-    EXPERTA_AVAILABLE = True
-except Exception:
-    EXPERTA_AVAILABLE = False
-
-# --- Data (translated from kb/*.pl) ---
-# city(Name) -> (type, region, climate)
-CITIES: Dict[str, Tuple[str, str, str]] = {
-    'colombo': ('urban', 'west', 'tropical'),
-    'galle': ('beach', 'south', 'tropical'),
-    'mirissa': ('beach', 'south', 'tropical'),
-    'hambantota': ('beach', 'south', 'tropical'),
-    'kandy': ('cultural', 'central', 'mild'),
-    'nuwara_eliya': ('hill_country', 'central', 'cool'),
-    'ella': ('hill_country', 'uva', 'mild'),
-    'anuradhapura': ('historical', 'north_central', 'dry'),
-    'sigiriya': ('historical', 'north_central', 'dry'),
-    'yala': ('national_park', 'southeast', 'tropical'),
-    'horton_plains': ('national_park', 'central', 'cool'),
-    'jaffna': ('urban', 'north', 'dry'),
-    'trincomalee': ('beach', 'east', 'tropical'),
-    'arugam_bay': ('beach', 'east', 'tropical'),
-    'polonnaruwa': ('historical', 'north_central', 'dry'),
-    'dambulla': ('historical', 'central', 'dry'),
-    'bentota': ('beach', 'west', 'tropical'),
-    'negombo': ('beach', 'west', 'tropical'),
-    'matara': ('urban', 'south', 'tropical'),
-    'badulla': ('hill_country', 'uva', 'mild'),
-}
-
-ATTRACTIONS: Dict[str, List[str]] = {
-    'kandy': ['temple_of_tooth'],
-    'nuwara_eliya': ['tea_plantations'],
-    'mirissa': ['whale_watching'],
-    'ella': ['nine_arches_bridge'],
-    'galle': ['galle_fort'],
-    'anuradhapura': ['ancient_ruins'],
-    'sigiriya': ['sigiriya_rock'],
-    'yala': ['wildlife_safari'],
-    'horton_plains': ['worlds_end'],
-    'jaffna': ['nallur_kandaswamy_temple'],
-    'trincomalee': ['pigeon_island'],
-    'arugam_bay': ['surfing'],
-    'polonnaruwa': ['gal_vihara'],
-    'dambulla': ['golden_temple'],
-    'bentota': ['water_sports'],
-    'negombo': ['fish_market'],
-    'matara': ['star_fort'],
-    'badulla': ['demodara_loop'],
-}
-
-DISTANCES: List[Tuple[str, str, int]] = [
-    ('colombo', 'kandy', 115), ('kandy', 'nuwara_eliya', 77), ('nuwara_eliya', 'ella', 60),
-    ('colombo', 'mirissa', 155), ('colombo', 'galle', 119), ('galle', 'mirissa', 36),
-    ('ella', 'yala', 130), ('colombo', 'anuradhapura', 205), ('anuradhapura', 'sigiriya', 22),
-    ('kandy', 'sigiriya', 90), ('kandy', 'horton_plains', 60), ('mirissa', 'matara', 12),
-    ('matara', 'hambantota', 80), ('hambantota', 'yala', 60), ('colombo', 'negombo', 34),
-    ('negombo', 'kandy', 100), ('kandy', 'dambulla', 72), ('dambulla', 'sigiriya', 17),
-    ('sigiriya', 'polonnaruwa', 60), ('polonnaruwa', 'trincomalee', 107), ('kandy', 'badulla', 137),
-    ('badulla', 'ella', 28), ('trincomalee', 'anuradhapura', 110), ('anuradhapura', 'jaffna', 200),
-    ('arugam_bay', 'yala', 160), ('arugam_bay', 'ella', 165), ('bentota', 'galle', 56),
-    ('bentota', 'colombo', 65),
-]
-
-COORDS: Dict[str, Dict[str, float]] = {
-    'colombo': {'lat': 6.9271, 'lon': 79.8612}, 'galle': {'lat': 6.0535, 'lon': 80.2210},
-    'mirissa': {'lat': 5.9485, 'lon': 80.4719}, 'hambantota': {'lat': 6.1246, 'lon': 81.1210},
-    'kandy': {'lat': 7.2906, 'lon': 80.6337}, 'nuwara_eliya': {'lat': 6.9497, 'lon': 80.7891},
-    'ella': {'lat': 6.8755, 'lon': 81.0460}, 'anuradhapura': {'lat': 8.3114, 'lon': 80.4037},
-    'sigiriya': {'lat': 7.9570, 'lon': 80.7603}, 'yala': {'lat': 6.3667, 'lon': 81.5167},
-    'horton_plains': {'lat': 6.8020, 'lon': 80.7998}, 'jaffna': {'lat': 9.6615, 'lon': 80.0255},
-    'trincomalee': {'lat': 8.5874, 'lon': 81.2152}, 'arugam_bay': {'lat': 6.8390, 'lon': 81.8386},
-    'polonnaruwa': {'lat': 7.9396, 'lon': 81.0003}, 'dambulla': {'lat': 7.8568, 'lon': 80.6490},
-    'bentota': {'lat': 6.4210, 'lon': 80.0011}, 'negombo': {'lat': 7.2083, 'lon': 79.8358},
-    'matara': {'lat': 5.9549, 'lon': 80.5550}, 'badulla': {'lat': 6.9897, 'lon': 81.0550},
-}
-
-BUDGETS: Dict[str, str] = {
-    'mirissa': 'moderate', 'nuwara_eliya': 'high', 'kandy': 'moderate', 'ella': 'budget',
-    'colombo': 'variable', 'galle': 'moderate', 'negombo': 'budget', 'bentota': 'moderate',
-    'anuradhapura': 'budget', 'sigiriya': 'moderate', 'polonnaruwa': 'budget', 'dambulla': 'budget',
-    'trincomalee': 'moderate', 'jaffna': 'moderate', 'arugam_bay': 'budget', 'matara': 'budget',
-    'badulla': 'budget',
-}
-
-BEST_SEASON: Dict[str, str] = {
-    'mirissa': 'winter', 'ella': 'summer', 'kandy': 'all_year', 'nuwara_eliya': 'all_year',
-    'galle': 'winter', 'yala': 'winter', 'arugam_bay': 'summer', 'trincomalee': 'summer',
-    'jaffna': 'summer', 'negombo': 'all_year', 'bentota': 'winter', 'anuradhapura': 'all_year',
-    'sigiriya': 'all_year', 'polonnaruwa': 'all_year', 'dambulla': 'all_year', 'horton_plains': 'all_year',
-    'matara': 'winter', 'badulla': 'summer',
-}
+from typing import List, Dict, Any, Optional
+from app.kb.entities import Season, BudgetLevel
+from app.kb.data import CITIES_BY_NAME, get_city, get_all_cities as get_all_city_objects
+from app.kb.algorithms import build_distance_graph, dijkstra_shortest_path
+from app.kb.rules import create_engine_with_preferences, EXPERTA_AVAILABLE
 
 
-def _build_graph() -> Dict[str, Dict[str, int]]:
-    g: Dict[str, Dict[str, int]] = {}
-    for a, b, d in DISTANCES:
-        g.setdefault(a, {})[b] = d
-        g.setdefault(b, {})[a] = d
-    return g
-
-
-def _dijkstra(graph: Dict[str, Dict[str, int]], source: str, target: str) -> Tuple[List[str], int]:
-    # Standard Dijkstra for shortest path by distance
-    import heapq
-
-    if source == target:
-        return [source], 0
-
-    queue = [(0, source, [source])]
-    seen = {source: 0}
-    while queue:
-        dist, node, path = heapq.heappop(queue)
-        if node == target:
-            return path, dist
-        for neigh, w in graph.get(node, {}).items():
-            nd = dist + w
-            if neigh not in seen or nd < seen[neigh]:
-                seen[neigh] = nd
-                heapq.heappush(queue, (nd, neigh, path + [neigh]))
-    return [], 0
-
-
-if EXPERTA_AVAILABLE:
-    class TravelEngine(KnowledgeEngine):
-        @Rule(Fact(city=MATCH.city, budget=MATCH.budget, best_season=MATCH.season))
-        def mark_recommended(self, city, budget, season):
-            # When a city fact matches, assert a recommended fact for it.
-            self.declare(Fact(recommended=city))
-
-
-def recommend_trip(season: str, budget: str, start: str = 'colombo', end: str = None) -> List[Dict[str, Any]]:
-    """Return route recommendations as list of dicts {'route': [...], 'distance': int}.
-
-    This uses Experta to mark recommended cities (when available) but computes
-    the actual route using a deterministic Dijkstra implementation on the
-    DISTANCES graph.
+def recommend_trip(
+    season: str, 
+    budget: str, 
+    start: str = 'colombo', 
+    end: str = None,
+    interests: List[str] = None
+) -> List[Dict[str, Any]]:
     """
-    candidates = []
-    # Simple budget match: variable matches everything
-    for city in CITIES.keys():
-        city_budget = BUDGETS.get(city, 'variable')
-        season_ok = (season == 'all_year') or (BEST_SEASON.get(city) == season)
-        budget_ok = (budget == 'variable') or (city_budget == budget)
-        if season_ok and budget_ok:
-            candidates.append(city)
-
-    # If experta is available, run engine to get 'recommended' facts (demonstration)
-    recommended_by_experta = set()
+    Get travel route recommendations using expert system reasoning.
+    
+    Args:
+        season: Travel season (winter/summer/all_year)
+        budget: Budget level (budget/moderate/high/variable)
+        start: Starting city name
+        end: Ending city name (if None, recommends multiple destinations)
+        interests: Optional list of interests (beach, culture, history, nature, hiking)
+    
+    Returns:
+        List of route recommendations with:
+        - route: List of city names from start to end
+        - distance: Total distance in km
+        - recommended_score: Higher for expert-system recommended cities
+        - reason: Why this route was recommended (if available)
+    """
+    # Build distance graph for pathfinding
+    graph = build_distance_graph()
+    
+    # Get expert system recommendations
+    recommended_cities = set()
+    highly_recommended = set()
+    avoided_cities = set()
+    
     if EXPERTA_AVAILABLE:
-        engine = TravelEngine()
-        # Declare compound facts with fields city, budget, best_season
-        for c in CITIES.keys():
-            engine.declare(Fact(city=c, budget=BUDGETS.get(c), best_season=BEST_SEASON.get(c)))
-        engine.run()
-        for f in engine.facts.values():
-            if isinstance(f, Fact) and f.get('recommended'):
-                recommended_by_experta.add(f.get('recommended'))
-
-    # Build graph and compute routes
-    graph = _build_graph()
-    start_city = start or 'colombo'
+        engine = create_engine_with_preferences(season, budget, interests or [])
+        recommendations = engine.get_recommendations()
+        recommended_cities = recommendations.get('recommended', set())
+        highly_recommended = recommendations.get('highly_recommended', set())
+        avoided_cities = recommendations.get('avoided', set())
+    else:
+        # Fallback: simple filtering if Experta not available
+        for city in get_all_city_objects():
+            season_match = (season == 'all_year' or 
+                          city.best_season.value == season or 
+                          city.best_season == Season.ALL_YEAR)
+            budget_match = (budget == 'variable' or 
+                          city.budget_level.value == budget or 
+                          city.budget_level == BudgetLevel.VARIABLE)
+            
+            if season_match and budget_match:
+                recommended_cities.add(city.name)
+    
+    # Determine candidate destinations
+    if end:
+        # Specific destination requested
+        candidates = [end] if end in CITIES_BY_NAME else []
+    else:
+        # Recommend from expert system suggestions
+        candidates = list(recommended_cities - avoided_cities)
+    
+    # Calculate routes to each candidate
     results: List[Dict[str, Any]] = []
-    for dest in candidates:
-        end_city = end or dest
-        path, dist = _dijkstra(graph, start_city, end_city)
-        if path:
-            score_boost = 1 if dest in recommended_by_experta else 0
-            results.append({'route': path, 'distance': dist, 'recommended_score': score_boost})
-
-    # Sort by distance, then experta score (recommended first)
-    results.sort(key=lambda r: (r['distance'] - r.get('recommended_score', 0)))
+    start_city = start or 'colombo'
+    
+    for destination in candidates:
+        if destination == start_city:
+            # Same start and end
+            results.append({
+                'route': [start_city],
+                'distance': 0,
+                'recommended_score': 2 if destination in highly_recommended else 1,
+                'reason': 'same_location'
+            })
+        else:
+            # Find shortest path
+            path, distance = dijkstra_shortest_path(graph, start_city, destination)
+            
+            if path:
+                score = 0
+                reason = 'route_available'
+                
+                if destination in highly_recommended:
+                    score = 3
+                    reason = 'highly_recommended_destination'
+                elif destination in recommended_cities:
+                    score = 2
+                    reason = 'recommended_destination'
+                elif destination in avoided_cities:
+                    score = -1
+                    reason = 'not_ideal_season'
+                else:
+                    score = 1
+                
+                results.append({
+                    'route': path,
+                    'distance': distance,
+                    'recommended_score': score,
+                    'reason': reason
+                })
+    
+    # Sort by recommendation score (descending), then distance (ascending)
+    results.sort(key=lambda r: (-r.get('recommended_score', 0), r.get('distance', 0)))
+    
     return results
 
 
 def get_city_coords(cities: List[str]) -> Dict[str, Dict[str, float]]:
-    return {c: COORDS[c] for c in cities if c in COORDS}
+    """
+    Get coordinates for a list of cities.
+    
+    Args:
+        cities: List of city names
+    
+    Returns:
+        Dict mapping city names to {lat, lon} dicts
+    """
+    coords = {}
+    for city_name in cities:
+        city = get_city(city_name)
+        if city:
+            coords[city_name] = {
+                'lat': city.latitude,
+                'lon': city.longitude
+            }
+    return coords
 
 
 def get_attractions(cities: List[str]) -> Dict[str, List[str]]:
-    return {c: ATTRACTIONS.get(c, []) for c in cities}
+    """
+    Get attractions for a list of cities.
+    
+    Args:
+        cities: List of city names
+    
+    Returns:
+        Dict mapping city names to lists of attraction names
+    """
+    attractions = {}
+    for city_name in cities:
+        city = get_city(city_name)
+        if city:
+            attractions[city_name] = city.attractions
+        else:
+            attractions[city_name] = []
+    return attractions
 
 
 def get_all_cities() -> List[str]:
-    return sorted(list(CITIES.keys()))
+    """
+    Get list of all available city names, sorted alphabetically.
+    
+    Returns:
+        Sorted list of city names
+    """
+    return sorted(CITIES_BY_NAME.keys())
 
 
-def city_exists(city: str) -> bool:
-    return city in CITIES
+def city_exists(city_name: str) -> bool:
+    """
+    Check if a city exists in the knowledge base.
+    
+    Args:
+        city_name: Name of the city to check
+    
+    Returns:
+        True if city exists, False otherwise
+    """
+    return city_name in CITIES_BY_NAME
+
+
+def get_city_info(city_name: str) -> Optional[Dict[str, Any]]:
+    """
+    Get detailed information about a city.
+    
+    Args:
+        city_name: Name of the city
+    
+    Returns:
+        Dict with city details, or None if city doesn't exist
+    """
+    city = get_city(city_name)
+    if not city:
+        return None
+    
+    return {
+        'name': city.name,
+        'type': city.city_type.value,
+        'region': city.region.value,
+        'climate': city.climate.value,
+        'best_season': city.best_season.value,
+        'budget_level': city.budget_level.value,
+        'coordinates': {'lat': city.latitude, 'lon': city.longitude},
+        'attractions': city.attractions
+    }

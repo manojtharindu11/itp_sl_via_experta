@@ -1,13 +1,17 @@
 """Adapter to expose the helper functions used by the app, backed by
-the Experta-based knowledge module (`experta_kb`).
+the modular Experta-based knowledge system.
 
-This file intentionally only supports the Experta backend. The older Prolog
-subprocess-based code has been removed as part of the migration.
+This file uses the new modular structure:
+- app.kb.entities: Domain models (City, Connection, Enums)
+- app.kb.data: Knowledge base facts
+- app.kb.rules: Expert system rules
+- app.kb.algorithms: Pathfinding algorithms
+- app.experta_kb_v2: Integration layer
 """
 from typing import List, Dict, Any
 
 try:
-    from experta_kb import (
+    from app.experta_kb import (
         recommend_trip as experta_recommend_trip,
         get_city_coords as experta_get_city_coords,
         get_attractions as experta_get_attractions,
@@ -17,7 +21,7 @@ try:
 except Exception as e:
     raise ImportError(
         "Experta-based knowledge module not available. Install 'experta' and ensure"
-        " 'experta_kb.py' exists in app/ folder."
+        " the modular KB structure exists in app/kb/ folder."
     ) from e
 
 
