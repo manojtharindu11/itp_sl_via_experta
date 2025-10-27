@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+
+# Virtual environment
+.venv/
+venv/
+
+# Editor/IDE
+.vscode/
+*.swp
+*.swo
+*.swn
+*.idea/
+
+# OS files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+# Prolog
+*.qlb
+
+# Logs
+*.log
+
+# Streamlit
+.streamlit/
+
+# Environment
+.env
