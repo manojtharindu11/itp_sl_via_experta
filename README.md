@@ -117,6 +117,50 @@ Run tests (optional):
 pytest test/test_.py -v
 ```
 
+## Test Suite
+
+The project includes **23 comprehensive test cases** covering:
+
+### Season-based Tests (3 tests)
+
+- Winter beach destinations (Mirissa, Galle)
+- Summer east coast destinations (Arugam Bay)
+- All-year destinations (Kandy, cultural sites)
+
+### Budget-based Tests (3 tests)
+
+- Budget-friendly routes (Ella)
+- High-end destinations (Nuwara Eliya)
+- Variable budget handling (Colombo)
+
+### Route Planning Tests (4 tests)
+
+- Standard route calculations (Colombo → Ella)
+- Distance calculations and validation
+- Same start/end city handling
+- Unreachable destinations with strict filters
+
+### Helper Function Tests (6 tests)
+
+- City listing and existence checks
+- Coordinate retrieval and validation
+- Attraction data retrieval
+- Invalid city handling
+
+### Edge Cases & Error Handling (3 tests)
+
+- Invalid season/budget parameters
+- Empty route scenarios
+- Multiple route options
+
+### Integration Tests (3 tests)
+
+- Full winter beach trip scenario
+- Complete hill country tour
+- Cultural triangle exploration
+
+**All tests pass ✅** — Run with `pytest test/test_.py -v` to verify.
+
 Environment variables (.env)
 
 You can configure paths and tokens without hardcoding them. Copy the sample and edit as needed:
