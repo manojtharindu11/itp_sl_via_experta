@@ -1,7 +1,6 @@
 # ITP-SL — Intelligent Travel Planning (Sri Lanka)
 
 This project demonstrates an expert-system-backed travel recommender for Sri Lanka using **Experta**.
-The original Prolog-based KB has been migrated to a Python implementation (`app/experta_kb.py`).
 
 ## How It Works
 
